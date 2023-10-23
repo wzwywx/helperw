@@ -15,9 +15,11 @@ use std::env;
 fn main() {
     let mut args: Vec<String> = env::args().collect::<Vec<String>>();
     args.remove(0);
+
+    // TODO: remove this once complete
     println!("{:?}", args);
 
-    // Since both `task` and `timew` requires a description, a lone string without
+    // Since both `task` and `timew` require a description, a lone string without
     // any options will be used as the description
     let description: String;
 
@@ -30,4 +32,13 @@ fn main() {
 
     let project: Option<String> = None;
     let tags: Option<Vec<String>> = None;
+
+    // '-' is reserved by the command to denote the time interval. It can be used
+    // to check if the user passed the time interval correctly since '-' expects to have a value before and after it.
+    // By checking the existence of the time interval, provided no options are provided, the remaining string
+    // is expected to be the description.
+    if !args.contains(&"-".to_string()) {
+        // TODO: colorize this
+        eprintln!("Time interval is mising. Have you added '-' between your two datetimes e.g. 20000102T0000 - 20000102T0100 ?");
+    }
 }

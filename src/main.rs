@@ -40,5 +40,22 @@ fn main() {
     if !args.contains(&"-".to_string()) {
         // TODO: colorize this
         eprintln!("Time interval is mising. Have you added '-' between your two datetimes e.g. 20000102T0000 - 20000102T0100 ?");
+    } else {
+        // `unwrap`` is safe here because the existence of dash was checked in the preceding `if` block
+
+        let dash_position = args.iter().position(|x| x == &"-".to_string()).unwrap();
+
+        let before_dash_position = dash_position
+            .checked_sub(1)
+            .and_then(|idx_before| args.get(idx_before));
+        let after_dash_position = args.get(dash_position + 1);
+
+        // Make sure an argument exists before and after the dash because a closed interval is assumed i.e. start and end date must always be specified.
+        // TODO: A bit repetitive. Minor fix later
+        if before_dash_position.is_none() {
+            eprintln!("Missing a start date. Make sure to put the date before `-`");
+        } else if after_dash_position.is_none() {
+            eprintln!("Missing an end date. Make sure to put the date after `-`");
+        }
     }
 }

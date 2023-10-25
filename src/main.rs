@@ -1,5 +1,5 @@
 use std::{
-    env,
+    default, env,
     ops::{Add, Deref, Sub},
     process::exit,
 };
@@ -37,10 +37,21 @@ fn main() -> Result<(), &'static str> {
     let project: Option<String> = None;
     let tags: Option<Vec<String>> = None;
 
+    let mut parsed_args = ParsedArguments::default();
     // '-' is reserved by the command to denote the time interval. It can be used
     // to check if the user passed the time interval correctly since '-' expects to have a value before and after it.
     // By checking the existence of the time interval, provided no options are provided, the remaining string
     // is expected to be the description.
+    get_time_intervals(&mut args, &mut parsed_args);
+    println!("end: {:?}", args);
+    Ok(())
+}
+
+// TODO: Ponder: Maybe too specific? Maybe abstract-able?
+fn get_time_intervals(
+    args: &mut Vec<String>,
+    parsed_args: &mut ParsedArguments,
+) -> Result<(), &'static str> {
     if !args.contains(&"-".to_string()) {
         // TODO: colorize this
         return Err("Time interval is mising. Have you added '-' between your two datetimes e.g. 20000102T0000 - 20000102T0100 ?");
@@ -65,8 +76,8 @@ fn main() -> Result<(), &'static str> {
         let before_dash_position = before_dash_position.unwrap();
 
         // `unwrap` won't panic here because dash positions for before and after was checked in the preceding `if` block
-        start_time = args.get(before_dash_position).unwrap().to_string();
-        end_time = args.get(after_dash_position).unwrap().to_string();
+        parsed_args.start_time = Some(args.get(before_dash_position).unwrap().to_string());
+        parsed_args.end_time = Some((args.get(after_dash_position).unwrap().to_string()));
 
         // By removing all the time interval arguments including the dash, it can be deduced that the rest will most likely be the description
         // and the optional tags and projects
@@ -74,6 +85,11 @@ fn main() -> Result<(), &'static str> {
         args.remove(dash_position);
         args.remove(before_dash_position);
     }
-    println!("end: {:?}", args);
     Ok(())
+}
+
+#[derive(Default)]
+struct ParsedArguments {
+    start_time: Option<String>,
+    end_time: Option<String>,
 }

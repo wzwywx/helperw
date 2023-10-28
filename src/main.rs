@@ -21,6 +21,9 @@ fn main() -> Result<(), &'static str> {
     println!("initial: {:?}", args);
 
     let mut parsed_args = ParsedArguments::default();
+
+    //TIME INTERVAL
+    //---
     // '-' is reserved by the command to denote the time interval. It can be used
     // to check if the user passed the time interval correctly since '-' expects to have a value before and after it.
     // By checking the existence of the time interval, provided no options are provided, the remaining string
@@ -29,17 +32,26 @@ fn main() -> Result<(), &'static str> {
         return Err(msg);
     }
 
+    //PROJECTS AND TAGS
+    //---
+    // Projects and tags are commands identified by their `--`. They are optional but they should still be extracted first
+    // because everything after their command will be used as their data e.g. `--project project-phoenix` or `--tags project agile code`
+    let _ = extract_arguments_and_store(&mut args, &mut parsed_args, "--project");
+    let _ = extract_arguments_and_store(&mut args, &mut parsed_args, "--tags");
+
+    //DESCRIPTION
+    //---
     // Get the description from the arguments left in the argument array. This assumes that
     // every possible non-description arguments has been parsed and handled
     //
-    // Not a big fan of cloning the value inside the Option here, but the presumption is the descriptions
-    // are short and shouldn't take too much space. I might opt for a cleaner design later; perhaps use references instead
+    // Not a big fan of cloning the value inside the Option here, but the presumption is the description
+    // is short and shouldn't take too much space. I might opt for a cleaner design later; perhaps use references instead
     // since there's no plan to mutate or own anything.
     parsed_args.description = args.get(0).cloned();
 
     // TODO: remove debug statement
     println!("end of args: {:?}", args);
-    println!("final parsed_args: {:?}", parsed_args);
+    println!("final parsed_args: {:#?}", parsed_args);
     Ok(())
 }
 
@@ -109,12 +121,15 @@ fn extract_arguments_and_store(
         return Err("Prefix can only be --project or --tag");
     }
 
-    let command_position = args
+    let command_position: usize = if let Some((idx, _)) = args
         .iter()
         .enumerate()
         .find(|(_, arg)| arg.contains(command))
-        .unwrap()
-        .0;
+    {
+        idx
+    } else {
+        return Err("Command not found");
+    };
 
     let input_error = Err("Missing input to --project");
 
@@ -140,7 +155,7 @@ fn extract_arguments_and_store(
 
             //TODO: Is this possible to be mapped? Seems weird because there's a break in the control flow. Later.
             for arg in &args[command_position + 1..] {
-                if arg != "--project" {
+                if arg == "--project" {
                     break;
                 }
                 tags.push(arg.to_string());

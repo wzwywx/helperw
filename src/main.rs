@@ -43,7 +43,12 @@ fn main() -> Result<(), &'static str> {
     Ok(())
 }
 
-// TODO: Ponder: Maybe too specific? Maybe abstract-able?
+// TODO: Ponder: Maybe too specific? Maybe abstract-able? Abstract enough to cover prefix and infix arguments
+// Refer to ParsedArguments `start_time` and `end_time` documentation for the general idea on what is expected
+// of a time interval. And as of now, even though timewarrior does expect certain format for time, it's not
+// the job of the script and of course, this function, to check whether the passed interval is correct or not.
+//
+// That capability might be added in the future.
 fn extract_time_intervals(
     args: &mut Vec<String>,
     parsed_args: &mut ParsedArguments,
@@ -75,11 +80,79 @@ fn extract_time_intervals(
         parsed_args.start_time = Some(args.get(before_dash_position).unwrap().to_string());
         parsed_args.end_time = Some((args.get(after_dash_position).unwrap().to_string()));
 
-        // By removing all the time interval arguments including the dash, it can be deduced that the rest will most likely be the description
+        // By removing all the time interval arguments including the dash, it can be deduced that the remaining arguments will most likely be the description
         // and the optional tags and projects
         args.remove(after_dash_position);
         args.remove(dash_position);
         args.remove(before_dash_position);
+    }
+    Ok(())
+}
+
+// A general function that can parse and extract specific arguments and optionally, the input/data after it. For example,
+// `--project sleep` and `-v` can both be extracted and then stored in a struct. For now that struct is `ParsedArguments`.
+//
+// Another thing worth mentioning, this function mutates the argument array. I'll add a non-mutating version of this function later.
+//
+// TODO: I don't think mutating ParsedArguments and args is necessary. They should just return the info and let the caller do what they want.
+// Unless, I want to pull the complexity downward especially if the behaviour is common enough to handle by the function itself.
+// And I think this function is dependent on parsed_args and they share information that doesn't seem to be necessary.
+//
+// TODO: I might need to make a more general function for this. This function is too specific to the script's need.
+fn extract_arguments_and_store(
+    args: &mut Vec<String>,
+    parsed_args: &mut ParsedArguments,
+    command: &str,
+) -> Result<(), &'static str> {
+    // TODO: this should be in a loop with an array of approved prefixes
+    if !(command == "--project" || command == "--tags") {
+        return Err("Prefix can only be --project or --tag");
+    }
+
+    let command_position = args
+        .iter()
+        .enumerate()
+        .find(|(_, arg)| arg.contains(command))
+        .unwrap()
+        .0;
+
+    let input_error = Err("Missing input to --project");
+
+    match command {
+        // TODO: hackyish. because this function is (supposed to be) quite general, I don't know whether there should be a check
+        // that determines whether the input that follows the command is an input to the command or another command.
+        // It's hard to know because I haven't decided on a proper commands/options format
+        "--project" => {
+            let project_name = args.get(command_position + 1).cloned();
+
+            match project_name {
+                Some(_) if project_name.as_ref().unwrap() == &"--tags".to_string() => {
+                    return input_error;
+                }
+                Some(_) => parsed_args.project = project_name,
+                None => {
+                    return input_error;
+                }
+            }
+        }
+        "--tags" => {
+            let mut tags = Vec::<String>::new();
+
+            //TODO: Is this possible to be mapped? Seems weird because there's a break in the control flow. Later.
+            for arg in &args[command_position + 1..] {
+                if arg != "--project" {
+                    break;
+                }
+                tags.push(arg.to_string());
+            }
+
+            if tags.is_empty() {
+                return input_error;
+            }
+            // let project_name = args.get(command_position + 1).cloned();
+            parsed_args.tags = Some(tags);
+        }
+        _ => return input_error,
     }
     Ok(())
 }

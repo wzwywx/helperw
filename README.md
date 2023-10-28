@@ -1,0 +1,1 @@
+## Note to self: Using Rust for scripting is not recommended. Learn Bash script you dummy.

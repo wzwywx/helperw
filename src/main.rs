@@ -1,8 +1,4 @@
-use std::{
-    default, env,
-    ops::{Add, Deref, Sub},
-    process::exit,
-};
+use std::env;
 
 /// The command takes in a series of tags and descriptions, plus the task's time interval
 /// and then log the data in both taskwarrior and timewarrior
@@ -15,40 +11,40 @@ use std::{
 /// Options:
 /// -p <project name>
 /// -t <tags...>
-
 fn main() -> Result<(), &'static str> {
     let mut args: Vec<String> = env::args().collect::<Vec<String>>();
+
+    // The program name is not necessary for this script
     args.remove(0);
 
     // TODO: remove this once complete
     println!("initial: {:?}", args);
-
-    // Since both `task` and `timew` require a description, a lone string without
-    // any options will be used as the description
-    let description: String;
-
-    // `timew track` requires a time interval which is quite flexible as documented [here](https://timewarrior.net/docs/interval/)
-    // and [here](https://timewarrior.net/docs/dates/).
-    // But, supporting the whole syntax in `helperw` might be difficult, so for now,
-    // the expected datetime syntax is strictly YYYYMMDDThhmm.
-    let start_time: String;
-    let end_time: String;
-
-    let project: Option<String> = None;
-    let tags: Option<Vec<String>> = None;
 
     let mut parsed_args = ParsedArguments::default();
     // '-' is reserved by the command to denote the time interval. It can be used
     // to check if the user passed the time interval correctly since '-' expects to have a value before and after it.
     // By checking the existence of the time interval, provided no options are provided, the remaining string
     // is expected to be the description.
-    get_time_intervals(&mut args, &mut parsed_args);
-    println!("end: {:?}", args);
+    if let Err(msg) = extract_time_intervals(&mut args, &mut parsed_args) {
+        return Err(msg);
+    }
+
+    // Get the description from the arguments left in the argument array. This assumes that
+    // every possible non-description arguments has been parsed and handled
+    //
+    // Not a big fan of cloning the value inside the Option here, but the presumption is the descriptions
+    // are short and shouldn't take too much space. I might opt for a cleaner design later; perhaps use references instead
+    // since there's no plan to mutate or own anything.
+    parsed_args.description = args.get(0).cloned();
+
+    // TODO: remove debug statement
+    println!("end of args: {:?}", args);
+    println!("final parsed_args: {:?}", parsed_args);
     Ok(())
 }
 
 // TODO: Ponder: Maybe too specific? Maybe abstract-able?
-fn get_time_intervals(
+fn extract_time_intervals(
     args: &mut Vec<String>,
     parsed_args: &mut ParsedArguments,
 ) -> Result<(), &'static str> {
@@ -88,8 +84,22 @@ fn get_time_intervals(
     Ok(())
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct ParsedArguments {
+    // `timew track` requires a relatively flexible time interval as documented [here](https://timewarrior.net/docs/interval/)
+    // and [here](https://timewarrior.net/docs/dates/).
+    // But, supporting the whole syntax in `helperw` might be difficult, so for now,
+    // the expected datetime syntax is strictly YYYYMMDDThhmm.
     start_time: Option<String>,
     end_time: Option<String>,
+
+    // Since both `task` and `timew` require a description, a lone string without
+    // any option before it will be used as the description
+    description: Option<String>,
+
+    project: Option<String>,
+    tags: Option<Vec<String>>,
 }
+
+#[cfg(debug_assertions)]
+fn execute_warriors() {}

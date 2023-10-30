@@ -1,5 +1,6 @@
 use std::env;
-
+use std::process::Command;
+use std::str::from_utf8;
 /// The command takes in a series of tags and descriptions, plus the task's time interval
 /// and then log the data in both taskwarrior and timewarrior
 ///
@@ -52,6 +53,27 @@ fn main() -> Result<(), &'static str> {
     // TODO: remove debug statement
     println!("end of args: {:?}", args);
     println!("final parsed_args: {:#?}", parsed_args);
+
+    // Since `task` and `timew` doesn't synchronize their database and are independent of each other, the order of the following commands
+    // do not matter.
+    // TODO: `task` and `timew` doesn't return anything to the stdout and instead prints the message in the
+    // stderror (presumably). Will need to handle that.
+    // TODO: wire task
+    let output = Command::new("task")
+        .args(parsed_args.tags.unwrap())
+        .output()
+        .unwrap();
+
+    // TODO: Wire timew
+    let res = from_utf8(&output.stdout).unwrap();
+    // let res: String = output
+    //     .stdout
+    //     .into_iter()
+    //     .map(|x| x.into())
+    //     .collect::<Vec<char>>()
+    //     .into_iter()
+    //     .collect();
+    println!("{}", res);
     Ok(())
 }
 
@@ -90,7 +112,7 @@ fn extract_time_intervals(
 
         // `unwrap` won't panic here because dash positions for before and after was checked in the preceding `if` block
         parsed_args.start_time = Some(args.get(before_dash_position).unwrap().to_string());
-        parsed_args.end_time = Some((args.get(after_dash_position).unwrap().to_string()));
+        parsed_args.end_time = Some(args.get(after_dash_position).unwrap().to_string());
 
         // By removing all the time interval arguments including the dash, it can be deduced that the remaining arguments will most likely be the description
         // and the optional tags and projects
@@ -98,6 +120,7 @@ fn extract_time_intervals(
         args.remove(dash_position);
         args.remove(before_dash_position);
     }
+
     Ok(())
 }
 
@@ -169,6 +192,7 @@ fn extract_arguments_and_store(
         }
         _ => return input_error,
     }
+
     Ok(())
 }
 
@@ -190,4 +214,4 @@ struct ParsedArguments {
 }
 
 #[cfg(debug_assertions)]
-fn execute_warriors() {}
+fn _execute_warriors() {}

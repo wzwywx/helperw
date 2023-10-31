@@ -37,6 +37,8 @@ fn main() -> Result<(), &'static str> {
     //---
     // Projects and tags are commands identified by their `--`. They are optional but they should still be extracted first
     // because everything after their command will be used as their data e.g. `--project project-phoenix` or `--tags project agile code`
+    // TODO: Maybe bound this a method to ParsedArguments because it seems a natural place for it
+    // Or is that not abstract?
     let _ = extract_arguments_and_store(&mut args, &mut parsed_args, "--project");
     let _ = extract_arguments_and_store(&mut args, &mut parsed_args, "--tags");
 
@@ -59,13 +61,18 @@ fn main() -> Result<(), &'static str> {
     // TODO: `task` and `timew` doesn't return anything to the stdout and instead prints the message in the
     // stderror (presumably). Will need to handle that.
     // TODO: wire task
-    let output = Command::new("task")
-        .args(parsed_args.tags.unwrap())
-        .output()
-        .unwrap();
+
+    let final_commands = parsed_args.commands_inputs();
+    println!("{}", final_commands.taskw);
+    println!("{}", final_commands.timew);
+
+    // let output = Command::new("task")
+    // .args([final_commands.taskw])
+    // .output()
+    // .unwrap();
 
     // TODO: Wire timew
-    let res = from_utf8(&output.stdout).unwrap();
+    // let res = from_utf8(&output.stdout).unwrap();
     // let res: String = output
     //     .stdout
     //     .into_iter()
@@ -73,7 +80,7 @@ fn main() -> Result<(), &'static str> {
     //     .collect::<Vec<char>>()
     //     .into_iter()
     //     .collect();
-    println!("{}", res);
+    // println!("{}", res);
     Ok(())
 }
 
@@ -211,6 +218,68 @@ struct ParsedArguments {
 
     project: Option<String>,
     tags: Option<Vec<String>>,
+}
+
+enum Warriors {
+    TaskW,
+    TimeW,
+}
+
+#[derive(Default)]
+struct FinalCommands {
+    taskw: String,
+    timew: String,
+}
+
+impl ParsedArguments {
+    // REDESIGN: how do I make this more generalizable? REDESIGN: This seems like a shallow interface
+    fn commands_inputs<'a>(&self) -> FinalCommands {
+        FinalCommands {
+            taskw: self.convert_add_input(Warriors::TaskW),
+
+            timew: "".to_string(), // self.convert_add_input(Warriors::TimeW),
+        }
+    }
+
+    // Creates a String that follows the expected input for either `taskw` and `timew`.
+    //
+    // # Panic
+    // This method assumes that description and the time interval data (start and end time) are available, and will panic if even one of them is unavailable. It's the caller's responsibility to do the check.
+    // REDESIGN: Don't raise error to the client since missing some details is an expected behaviour. Perhaps remove the asserts and just return an empty string or return an error if data is unavailable
+    fn convert_add_input<'a>(&'a self, warrior: Warriors) -> String {
+        match warrior {
+            Warriors::TaskW => {
+                assert!(self.description.is_some());
+                let description = self.description.clone().unwrap_or_default();
+
+                assert!(self.start_time.is_some());
+                assert!(self.end_time.is_some());
+
+                let time_interval = format!(
+                    "{} - {}",
+                    self.start_time.clone().unwrap(),
+                    self.end_time.clone().unwrap()
+                );
+
+                // Creates a space separated tags
+                let tags: String = self
+                    .tags
+                    .clone()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|x| "+".to_string() + x)
+                    .collect::<Vec<String>>()
+                    .join(" ");
+
+                let project = format!("project:{}", self.project.clone().unwrap_or_default());
+
+                return format!("add {description} {time_interval} {tags} {project}");
+            }
+            Warriors::TimeW => {}
+        }
+        "".to_string()
+        // self.description.unwrap()
+    }
 }
 
 #[cfg(debug_assertions)]

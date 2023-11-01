@@ -18,9 +18,6 @@ fn main() -> Result<(), &'static str> {
     // The program name is not necessary for this script
     args.remove(0);
 
-    // TODO: remove this once complete
-    println!("initial: {:?}", args);
-
     let mut parsed_args = ParsedArguments::default();
 
     //TIME INTERVAL
@@ -51,10 +48,6 @@ fn main() -> Result<(), &'static str> {
     // is short and shouldn't take too much space. I might opt for a cleaner design later; perhaps use references instead
     // since there's no plan to mutate or own anything.
     parsed_args.description = args.get(0).cloned();
-
-    // TODO: remove debug statement
-    println!("end of args: {:?}", args);
-    println!("final parsed_args: {:#?}", parsed_args);
 
     // Since `task` and `timew` doesn't synchronize their database and are independent of each other, the order of the following commands
     // do not matter.
@@ -232,12 +225,13 @@ struct FinalCommands {
 }
 
 impl ParsedArguments {
-    // REDESIGN: how do I make this more generalizable? REDESIGN: This seems like a shallow interface
+    // REDESIGN: how do I make this more generalizable?
+    // REDESIGN: This seems like a shallow interface
     fn commands_inputs<'a>(&self) -> FinalCommands {
         FinalCommands {
             taskw: self.convert_add_input(Warriors::TaskW),
 
-            timew: "".to_string(), // self.convert_add_input(Warriors::TimeW),
+            timew: self.convert_add_input(Warriors::TimeW), // self.convert_add_input(Warriors::TimeW),
         }
     }
 
@@ -245,21 +239,21 @@ impl ParsedArguments {
     //
     // # Panic
     // This method assumes that description and the time interval data (start and end time) are available, and will panic if even one of them is unavailable. It's the caller's responsibility to do the check.
-    // REDESIGN: Don't raise error to the client since missing some details is an expected behaviour. Perhaps remove the asserts and just return an empty string or return an error if data is unavailable
+    // REDESIGN: Don't raise error to the client since missing some details is an expected behaviour. Perhaps remove the asserts and just return an empty string or return an Option.
     fn convert_add_input<'a>(&'a self, warrior: Warriors) -> String {
         match warrior {
             Warriors::TaskW => {
                 assert!(self.description.is_some());
                 let description = self.description.clone().unwrap_or_default();
 
-                assert!(self.start_time.is_some());
-                assert!(self.end_time.is_some());
+                // assert!(self.start_time.is_some());
+                // assert!(self.end_time.is_some());
 
-                let time_interval = format!(
-                    "{} - {}",
-                    self.start_time.clone().unwrap(),
-                    self.end_time.clone().unwrap()
-                );
+                // let time_interval = format!(
+                //     "{} - {}",
+                //     self.start_time.clone().unwrap(),
+                //     self.end_time.clone().unwrap()
+                // );
 
                 // Creates a space separated tags
                 let tags: String = self
@@ -273,12 +267,33 @@ impl ParsedArguments {
 
                 let project = format!("project:{}", self.project.clone().unwrap_or_default());
 
-                return format!("add {description} {time_interval} {tags} {project}");
+                return format!("add {description} {tags} {project}");
             }
-            Warriors::TimeW => {}
+            Warriors::TimeW => {
+                let tags: String = self
+                    .tags
+                    .clone()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|x| "'".to_string() + x + "'")
+                    .collect::<Vec<String>>()
+                    .join(" ");
+
+                assert!(self.start_time.is_some());
+                assert!(self.end_time.is_some());
+
+                let time_interval = format!(
+                    "{} - {}",
+                    self.start_time.clone().unwrap(),
+                    self.end_time.clone().unwrap()
+                );
+
+                return format!(
+                    "track {time_interval} {tags} '{project}'",
+                    project = self.project.clone().unwrap_or_default()
+                );
+            }
         }
-        "".to_string()
-        // self.description.unwrap()
     }
 }
 

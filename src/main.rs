@@ -56,24 +56,47 @@ fn main() -> Result<(), &'static str> {
     // TODO: wire task
 
     let final_commands = parsed_args.commands_inputs();
-    println!("{}", final_commands.taskw);
-    println!("{}", final_commands.timew);
+    println!("{:?}", final_commands.taskw);
+    println!("{:?}", final_commands.timew);
 
-    // let output = Command::new("task")
-    // .args([final_commands.taskw])
-    // .output()
-    // .unwrap();
+    // TODO: Repetitive. Refactor into a simple loop
+    // let split_taskw: Vec<&str> = final_commands.taskw.split_whitespace().collect();
+    // let split_timew: Vec<&str> = final_commands.timew.split_whitespace().collect();
+
+    let taskw_output = Command::new("task")
+        // .args([final_commands.taskw])
+        .args(final_commands.taskw)
+        .output()
+        .unwrap();
+
+    // let timew_output = Command::new("timew")
+    //     // .args([final_commands.taskw])
+    //     .args(["track", "9am", "-", "10am", "a", "b"])
+    //     .output()
+    //     .unwrap();
 
     // TODO: Wire timew
-    // let res = from_utf8(&output.stdout).unwrap();
-    // let res: String = output
-    //     .stdout
-    //     .into_iter()
-    //     .map(|x| x.into())
-    //     .collect::<Vec<char>>()
-    //     .into_iter()
-    //     .collect();
-    // println!("{}", res);
+
+    // println!("{:#?}", split_timew);
+    let timew_output = Command::new("timew")
+        // .args([final_commands.taskw])
+        .args(final_commands.timew)
+        .output()
+        .unwrap();
+
+    let res = from_utf8(&taskw_output.stderr).unwrap();
+    let out = from_utf8(&taskw_output.stdout).unwrap();
+
+    println!("exit status taskw {}", taskw_output.status);
+    println!("{out}\n{res}");
+
+    // TODO: Wire timew
+    let res = from_utf8(&timew_output.stderr).unwrap();
+    let out = from_utf8(&timew_output.stdout).unwrap();
+
+    println!("exit status timew {}", timew_output.status);
+    println!("{out}\n{res}");
+
     Ok(())
 }
 
@@ -220,8 +243,8 @@ enum Warriors {
 
 #[derive(Default)]
 struct FinalCommands {
-    taskw: String,
-    timew: String,
+    taskw: Vec<String>,
+    timew: Vec<String>,
 }
 
 impl ParsedArguments {
@@ -240,7 +263,7 @@ impl ParsedArguments {
     // # Panic
     // This method assumes that description and the time interval data (start and end time) are available, and will panic if even one of them is unavailable. It's the caller's responsibility to do the check.
     // REDESIGN: Don't raise error to the client since missing some details is an expected behaviour. Perhaps remove the asserts and just return an empty string or return an Option.
-    fn convert_add_input<'a>(&'a self, warrior: Warriors) -> String {
+    fn convert_add_input<'a>(&'a self, warrior: Warriors) -> Vec<String> {
         match warrior {
             Warriors::TaskW => {
                 assert!(self.description.is_some());
@@ -256,42 +279,68 @@ impl ParsedArguments {
                 // );
 
                 // Creates a space separated tags
-                let tags: String = self
+                let tags: Vec<String> = self
                     .tags
                     .clone()
                     .unwrap_or_default()
                     .iter()
                     .map(|x| "+".to_string() + x)
-                    .collect::<Vec<String>>()
-                    .join(" ");
+                    .collect::<Vec<String>>();
+                // .join(" ");
 
-                let project = format!("project:{}", self.project.clone().unwrap_or_default());
+                let project = format!("project:'{}'", self.project.clone().unwrap_or_default());
 
-                return format!("add {description} {tags} {project}");
+                let results = vec!["add".to_string(), description]
+                    .iter()
+                    .chain(&tags)
+                    .chain(vec![&project])
+                    .map(|x| x.clone())
+                    .collect::<Vec<String>>();
+                return results;
             }
+
             Warriors::TimeW => {
-                let tags: String = self
+                // FIXME: Fail to use quotes and double quotes to represent multi-word tags.
+                // Command probably expects a string to represent multi-word input so there's no need to enclose them in the quotes
+                // Hmm...maybe I'll need to look into Regex for this because white space isn't the only way arguments can be separated
+                let tags = self
                     .tags
                     .clone()
                     .unwrap_or_default()
                     .iter()
-                    .map(|x| "'".to_string() + x + "'")
-                    .collect::<Vec<String>>()
-                    .join(" ");
+                    // .map(|x| format!(r#"{x}"#))
+                    .map(|x| x.to_owned())
+                    .collect::<Vec<String>>();
+                // .join(" ");
 
                 assert!(self.start_time.is_some());
                 assert!(self.end_time.is_some());
 
-                let time_interval = format!(
-                    "{} - {}",
-                    self.start_time.clone().unwrap(),
-                    self.end_time.clone().unwrap()
-                );
+                // let time_interval = format!(
+                //     "{} - {}",
+                //     self.start_time.clone().unwrap(),
+                //     self.end_time.clone().unwrap()
+                // );
 
-                return format!(
-                    "track {time_interval} {tags} '{project}'",
-                    project = self.project.clone().unwrap_or_default()
-                );
+                // TODO: Dirty dirty! Clean this up.
+                let mut results = vec![
+                    "track".to_string(),
+                    self.start_time.clone().unwrap(),
+                    "-".to_string(),
+                    self.end_time.clone().unwrap(),
+                ]
+                .iter()
+                .chain(&tags)
+                // .chain(vec![&project])
+                .map(|x| x.clone())
+                .collect::<Vec<String>>();
+
+                if let Some(project) = self.project.clone() {
+                    results.push(project);
+                };
+                return results;
+                // return vec!["tracko".to_string()];
+                //return format!("track {time_interval} {tags} {project}");
             }
         }
     }

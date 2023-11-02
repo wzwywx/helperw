@@ -1,5 +1,6 @@
 use std::env;
-
+use std::process::Command;
+use std::str::from_utf8;
 /// The command takes in a series of tags and descriptions, plus the task's time interval
 /// and then log the data in both taskwarrior and timewarrior
 ///
@@ -17,9 +18,6 @@ fn main() -> Result<(), &'static str> {
     // The program name is not necessary for this script
     args.remove(0);
 
-    // TODO: remove this once complete
-    println!("initial: {:?}", args);
-
     let mut parsed_args = ParsedArguments::default();
 
     //TIME INTERVAL
@@ -36,6 +34,8 @@ fn main() -> Result<(), &'static str> {
     //---
     // Projects and tags are commands identified by their `--`. They are optional but they should still be extracted first
     // because everything after their command will be used as their data e.g. `--project project-phoenix` or `--tags project agile code`
+    // TODO: Maybe bound this a method to ParsedArguments because it seems a natural place for it
+    // Or is that not abstract?
     let _ = extract_arguments_and_store(&mut args, &mut parsed_args, "--project");
     let _ = extract_arguments_and_store(&mut args, &mut parsed_args, "--tags");
 
@@ -49,9 +49,54 @@ fn main() -> Result<(), &'static str> {
     // since there's no plan to mutate or own anything.
     parsed_args.description = args.get(0).cloned();
 
-    // TODO: remove debug statement
-    println!("end of args: {:?}", args);
-    println!("final parsed_args: {:#?}", parsed_args);
+    // Since `task` and `timew` doesn't synchronize their database and are independent of each other, the order of the following commands
+    // do not matter.
+    // TODO: `task` and `timew` doesn't return anything to the stdout and instead prints the message in the
+    // stderror (presumably). Will need to handle that.
+    // TODO: wire task
+
+    let final_commands = parsed_args.commands_inputs();
+    println!("{:?}", final_commands.taskw);
+    println!("{:?}", final_commands.timew);
+
+    // TODO: Repetitive. Refactor into a simple loop
+    // let split_taskw: Vec<&str> = final_commands.taskw.split_whitespace().collect();
+    // let split_timew: Vec<&str> = final_commands.timew.split_whitespace().collect();
+
+    let taskw_output = Command::new("task")
+        // .args([final_commands.taskw])
+        .args(final_commands.taskw)
+        .output()
+        .unwrap();
+
+    // let timew_output = Command::new("timew")
+    //     // .args([final_commands.taskw])
+    //     .args(["track", "9am", "-", "10am", "a", "b"])
+    //     .output()
+    //     .unwrap();
+
+    // TODO: Wire timew
+
+    // println!("{:#?}", split_timew);
+    let timew_output = Command::new("timew")
+        // .args([final_commands.taskw])
+        .args(final_commands.timew)
+        .output()
+        .unwrap();
+
+    let res = from_utf8(&taskw_output.stderr).unwrap();
+    let out = from_utf8(&taskw_output.stdout).unwrap();
+
+    println!("exit status taskw {}", taskw_output.status);
+    println!("{out}\n{res}");
+
+    // TODO: Wire timew
+    let res = from_utf8(&timew_output.stderr).unwrap();
+    let out = from_utf8(&timew_output.stdout).unwrap();
+
+    println!("exit status timew {}", timew_output.status);
+    println!("{out}\n{res}");
+
     Ok(())
 }
 
@@ -90,7 +135,7 @@ fn extract_time_intervals(
 
         // `unwrap` won't panic here because dash positions for before and after was checked in the preceding `if` block
         parsed_args.start_time = Some(args.get(before_dash_position).unwrap().to_string());
-        parsed_args.end_time = Some((args.get(after_dash_position).unwrap().to_string()));
+        parsed_args.end_time = Some(args.get(after_dash_position).unwrap().to_string());
 
         // By removing all the time interval arguments including the dash, it can be deduced that the remaining arguments will most likely be the description
         // and the optional tags and projects
@@ -98,6 +143,7 @@ fn extract_time_intervals(
         args.remove(dash_position);
         args.remove(before_dash_position);
     }
+
     Ok(())
 }
 
@@ -169,6 +215,7 @@ fn extract_arguments_and_store(
         }
         _ => return input_error,
     }
+
     Ok(())
 }
 
@@ -189,5 +236,115 @@ struct ParsedArguments {
     tags: Option<Vec<String>>,
 }
 
+enum Warriors {
+    TaskW,
+    TimeW,
+}
+
+#[derive(Default)]
+struct FinalCommands {
+    taskw: Vec<String>,
+    timew: Vec<String>,
+}
+
+impl ParsedArguments {
+    // REDESIGN: how do I make this more generalizable?
+    // REDESIGN: This seems like a shallow interface
+    fn commands_inputs<'a>(&self) -> FinalCommands {
+        FinalCommands {
+            taskw: self.convert_add_input(Warriors::TaskW),
+
+            timew: self.convert_add_input(Warriors::TimeW), // self.convert_add_input(Warriors::TimeW),
+        }
+    }
+
+    // Creates a String that follows the expected input for either `taskw` and `timew`.
+    //
+    // # Panic
+    // This method assumes that description and the time interval data (start and end time) are available, and will panic if even one of them is unavailable. It's the caller's responsibility to do the check.
+    // REDESIGN: Don't raise error to the client since missing some details is an expected behaviour. Perhaps remove the asserts and just return an empty string or return an Option.
+    fn convert_add_input<'a>(&'a self, warrior: Warriors) -> Vec<String> {
+        match warrior {
+            Warriors::TaskW => {
+                assert!(self.description.is_some());
+                let description = self.description.clone().unwrap_or_default();
+
+                // assert!(self.start_time.is_some());
+                // assert!(self.end_time.is_some());
+
+                // let time_interval = format!(
+                //     "{} - {}",
+                //     self.start_time.clone().unwrap(),
+                //     self.end_time.clone().unwrap()
+                // );
+
+                // Creates a space separated tags
+                let tags: Vec<String> = self
+                    .tags
+                    .clone()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|x| "+".to_string() + x)
+                    .collect::<Vec<String>>();
+                // .join(" ");
+
+                let project = format!("project:'{}'", self.project.clone().unwrap_or_default());
+
+                let results = vec!["add".to_string(), description]
+                    .iter()
+                    .chain(&tags)
+                    .chain(vec![&project])
+                    .map(|x| x.clone())
+                    .collect::<Vec<String>>();
+                return results;
+            }
+
+            Warriors::TimeW => {
+                // FIXME: Fail to use quotes and double quotes to represent multi-word tags.
+                // Command probably expects a string to represent multi-word input so there's no need to enclose them in the quotes
+                // Hmm...maybe I'll need to look into Regex for this because white space isn't the only way arguments can be separated
+                let tags = self
+                    .tags
+                    .clone()
+                    .unwrap_or_default()
+                    .iter()
+                    // .map(|x| format!(r#"{x}"#))
+                    .map(|x| x.to_owned())
+                    .collect::<Vec<String>>();
+                // .join(" ");
+
+                assert!(self.start_time.is_some());
+                assert!(self.end_time.is_some());
+
+                // let time_interval = format!(
+                //     "{} - {}",
+                //     self.start_time.clone().unwrap(),
+                //     self.end_time.clone().unwrap()
+                // );
+
+                // TODO: Dirty dirty! Clean this up.
+                let mut results = vec![
+                    "track".to_string(),
+                    self.start_time.clone().unwrap(),
+                    "-".to_string(),
+                    self.end_time.clone().unwrap(),
+                ]
+                .iter()
+                .chain(&tags)
+                // .chain(vec![&project])
+                .map(|x| x.clone())
+                .collect::<Vec<String>>();
+
+                if let Some(project) = self.project.clone() {
+                    results.push(project);
+                };
+                return results;
+                // return vec!["tracko".to_string()];
+                //return format!("track {time_interval} {tags} {project}");
+            }
+        }
+    }
+}
+
 #[cfg(debug_assertions)]
-fn execute_warriors() {}
+fn _execute_warriors() {}
